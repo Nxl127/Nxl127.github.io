@@ -23,52 +23,6 @@ jobs:
           pip install requests
 
       - name: Run AI Code Check
+        run: python scripts/check_code.py
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-        run: |
-          cat > check_script.py << 'EOF'
-import os, sys, re, glob, requests
-
-API_KEY = os.getenv("LLM_API_KEY")
-if not API_KEY:
-    print("❌ 错误：未设置 LLM_API_KEY 环境变量")
-    sys.exit(1)
-
-def check_single_block(lang, code):
-    if lang.lower() in ['text', 'plaintext', 'txt']:
-        return True, "跳过纯文本"
-    
-    prompt = f"检查以下{lang}代码是否有明显错误（语法错误、逻辑漏洞等）。如果没有错误，请只回复‘通过’；如果有错误，请简要说明。代码:\n{code}"
-    
-    try:
-        resp = requests.post("https://api.siliconflow.cn/v1/chat/completions",
-            headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
-            json={"model": "Qwen/Qwen2.5-Coder-32B-Instruct", "messages": [{"role": "user", "content": prompt}]})
-        
-        if resp.status_code == 200:
-            result = resp.json()["choices"][0]["message"]["content"].strip().lower()
-            return "通过" in result or "没问题" in result, result
-        else:
-            return False, f"API错误：{resp.status_code}"
-    except Exception as e:
-        return False, str(e)
-
-md_files = glob.glob("**/*.md", recursive=True)
-for md_file in md_files:
-    with open(md_file, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    blocks = re.findall(r'```(\w*)\n(.*?)```', content, re.DOTALL)
-    all_passed = True
-    
-    for lang, code in blocks:
-        passed, msg = check_single_block(lang, code)
-        if not passed:
-            print(f"⚠️ {md_file} 中的代码块有问题:\n{msg}\n")
-            all_passed = False
-    
-    if all_passed:
-        print(f"✅ {md_file} 所有代码块检查通过")
-
-if not all_passed:
-    sys.exit(1)
